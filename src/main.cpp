@@ -108,10 +108,13 @@ int main()
             switch (deviceType) {
                 case CL_DEVICE_TYPE_GPU:
                     std::cout << "    Device type: GPU" << std::endl;
+                    break;
                 case CL_DEVICE_TYPE_CPU:
                     std::cout << "    Device type: CPU" << std::endl;
-                case true:
+                    break;
+                default:
                     std::cout << "    Device type: UNKNOWN" << std::endl;
+                    break;
             }
             // - Размер памяти устройства в мегабайтах
             cl_ulong deviceMemSize = 0;
