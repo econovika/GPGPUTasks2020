@@ -122,6 +122,7 @@ int main()
     // у string есть метод c_str(), но обратите внимание что передать вам нужно указатель на указатель
     const char * str_kernel = kernel_sources.c_str();
     cl_program program = clCreateProgramWithSource(context, 1, (const char **) &str_kernel, nullptr, &err);
+    OCL_SAFE_CALL(err);
 
     // TODO 8 Теперь скомпилируйте программу и напечатайте в консоль лог компиляции
     // см. clBuildProgram
