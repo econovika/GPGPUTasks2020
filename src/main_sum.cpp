@@ -1,6 +1,10 @@
 #include <libutils/misc.h>
 #include <libutils/timer.h>
 #include <libutils/fast_random.h>
+#include <libgpu/shared_device_buffer.h>
+#include <libgpu/context.h>
+#include <vector>
+#include "cl/sum_cl.h"
 
 
 template<typename T>
@@ -46,19 +50,59 @@ int main(int argc, char **argv)
         timer t;
         for (int iter = 0; iter < benchmarkingIters; ++iter) {
             unsigned int sum = 0;
-            #pragma omp parallel for reduction(+:sum)
+#pragma omp parallel for reduction(+:sum)
             for (int i = 0; i < n; ++i) {
                 sum += as[i];
             }
             EXPECT_THE_SAME(reference_sum, sum, "CPU OpenMP result should be consistent!");
             t.nextLap();
         }
+        std::cout << std::endl;
         std::cout << "CPU OMP: " << t.lapAvg() << "+-" << t.lapStd() << " s" << std::endl;
         std::cout << "CPU OMP: " << (n/1000.0/1000.0) / t.lapAvg() << " millions/s" << std::endl;
+        std::cout << std::endl;
     }
 
     {
-        // TODO: implement on OpenCL
-        // gpu::Device device = gpu::chooseGPUDevice(argc, argv);
+        gpu::Device device = gpu::chooseGPUDevice(argc, argv);
+
+        gpu::Context context;
+        context.init(device.device_id_opencl);
+        context.activate();
+
+        gpu::gpu_mem_32u as_gpu;
+
+        as_gpu.resizeN(n);
+
+        as_gpu.writeN(as.data(), n);
+
+        ocl::Kernel sum_v1(sum_kernel, sum_kernel_length, "sum_v1");
+        sum_v1.compile();
+
+        unsigned int workGroupSize = 128;
+        unsigned int global_work_size = (n + workGroupSize - 1) / workGroupSize * workGroupSize;
+
+        {
+            timer t;
+            for (int iter = 0; iter < benchmarkingIters; ++iter) {
+                std::vector<unsigned int> _sum(1, 0);
+                gpu::gpu_mem_32u sum_gpu;
+                sum_gpu.resizeN(1);
+                sum_gpu.writeN(_sum.data(), 1);
+
+                sum_v1.exec(gpu::WorkSize(workGroupSize, global_work_size), as_gpu, sum_gpu, n);
+                sum_gpu.readN(_sum.data(), 1);
+
+                EXPECT_THE_SAME(reference_sum, _sum[0], "CPU and GPU results differ!");
+                t.nextLap();
+            }
+            std::cout << std::endl;
+            std::cout << "Kernel average time: " << t.lapAvg() << "+-" << t.lapStd() << " s" << std::endl;
+            std::cout << "GFlops:              " << n / t.lapAvg() / 10e9 << std::endl;
+            std::cout << "VRAM bandwidth:      " << (2.0 * n * sizeof(unsigned int)) / t.lapAvg() / (1024 * 1024 * 1024)
+                      << " GB/s" << std::endl;
+        }
     }
+
+    return 0;
 }
