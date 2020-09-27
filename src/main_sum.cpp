@@ -1,9 +1,9 @@
 #include <libutils/misc.h>
 #include <libutils/timer.h>
 #include <libutils/fast_random.h>
-#include <libgpu/shared_device_buffer.h>
 #include <libgpu/context.h>
-#include <vector>
+#include <libgpu/shared_device_buffer.h>
+
 #include "cl/sum_cl.h"
 
 
@@ -21,7 +21,12 @@ void raiseFail(const T &a, const T &b, std::string message, std::string filename
 
 int main(int argc, char **argv)
 {
-    int benchmarkingIters = 10;
+    gpu::Device device = gpu::chooseGPUDevice(argc, argv);
+    gpu::Context context;
+    context.init(device.device_id_opencl);
+    context.activate();
+
+    int benchmarkingIters = 50;
 
     unsigned int reference_sum = 0;
     unsigned int n = 100*1000*1000;
@@ -57,52 +62,34 @@ int main(int argc, char **argv)
             EXPECT_THE_SAME(reference_sum, sum, "CPU OpenMP result should be consistent!");
             t.nextLap();
         }
-        std::cout << std::endl;
         std::cout << "CPU OMP: " << t.lapAvg() << "+-" << t.lapStd() << " s" << std::endl;
         std::cout << "CPU OMP: " << (n/1000.0/1000.0) / t.lapAvg() << " millions/s" << std::endl;
-        std::cout << std::endl;
     }
 
     {
-        gpu::Device device = gpu::chooseGPUDevice(argc, argv);
+        unsigned int workGroupSize = 256;
 
-        gpu::Context context;
-        context.init(device.device_id_opencl);
-        context.activate();
+        ocl::Kernel sum_v2(sum_kernel, sum_kernel_length, "sum_v2");
+        sum_v2.compile(false);
 
-        gpu::gpu_mem_32u as_gpu;
-
+        gpu::gpu_mem_32u as_gpu, out_gpu;
         as_gpu.resizeN(n);
-
+        out_gpu.resizeN(1);
         as_gpu.writeN(as.data(), n);
 
-        ocl::Kernel sum_v1(sum_kernel, sum_kernel_length, "sum_v1");
-        sum_v1.compile();
-
-        unsigned int workGroupSize = 128;
-        unsigned int global_work_size = (n + workGroupSize - 1) / workGroupSize * workGroupSize;
-
-        {
-            timer t;
-            for (int iter = 0; iter < benchmarkingIters; ++iter) {
-                std::vector<unsigned int> _sum(1, 0);
-                gpu::gpu_mem_32u sum_gpu;
-                sum_gpu.resizeN(1);
-                sum_gpu.writeN(_sum.data(), 1);
-
-                sum_v1.exec(gpu::WorkSize(workGroupSize, global_work_size), as_gpu, sum_gpu, n);
-                sum_gpu.readN(_sum.data(), 1);
-
-                EXPECT_THE_SAME(reference_sum, _sum[0], "CPU and GPU results differ!");
-                t.nextLap();
-            }
-            std::cout << std::endl;
-            std::cout << "Kernel average time: " << t.lapAvg() << "+-" << t.lapStd() << " s" << std::endl;
-            std::cout << "GFlops:              " << n / t.lapAvg() / 10e9 << std::endl;
-            std::cout << "VRAM bandwidth:      " << (2.0 * n * sizeof(unsigned int)) / t.lapAvg() / (1024 * 1024 * 1024)
-                      << " GB/s" << std::endl;
+        timer t;
+        for (int iter = 0; iter < benchmarkingIters; ++iter) {
+            // clear sum
+            unsigned int tmp = 0;
+            out_gpu.writeN(&tmp, 1);
+            sum_v2.exec(gpu::WorkSize(workGroupSize, n),
+                            as_gpu, out_gpu, ocl::LocalMem(workGroupSize * sizeof(unsigned int)), n);
+            t.nextLap();
         }
+        unsigned int sum = 0;
+        out_gpu.readN(&sum, 1);
+        EXPECT_THE_SAME(reference_sum, sum, "GPU result should be consistent!");
+        std::cout << "GPU sum_v2:     " << t.lapAvg() << "+-" << t.lapStd() << " s" << std::endl;
+        std::cout << "GPU sum_v2:     " << (n/1000.0/1000.0) / t.lapAvg() << " millions/s" << std::endl;
     }
-
-    return 0;
 }
