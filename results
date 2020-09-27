@@ -1,0 +1,14 @@
+/home/ksenia/CLionProjects/GPGPUTasks2020/cmake-build-debug/sum 0
+OpenCL devices:
+  Device #0: GPU. GeForce GTX 1050 Ti. Total memory: 4040 Mb
+  Device #1: CPU. Intel(R) Core(TM) i7-8750H CPU @ 2.20GHz. Intel(R) Corporation. Total memory: 7649 Mb
+Using device #0: GPU. GeForce GTX 1050 Ti. Total memory: 4040 Mb
+benchmarkingIters: 50
+CPU:     0.263707+-0.00470548 s
+CPU:     379.209 millions/s
+CPU OMP: 0.0612153+-0.00597112 s
+CPU OMP: 1633.58 millions/s
+GPU sum_v2:     0.008182+-6.0663e-06 s
+GPU sum_v2:     12222 millions/s
+
+Process finished with exit code 0

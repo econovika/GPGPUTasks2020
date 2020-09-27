@@ -27,6 +27,7 @@ int main(int argc, char **argv)
     context.activate();
 
     int benchmarkingIters = 50;
+    std::cout << "benchmarkingIters: " << benchmarkingIters << std::endl;
 
     unsigned int reference_sum = 0;
     unsigned int n = 100*1000*1000;
