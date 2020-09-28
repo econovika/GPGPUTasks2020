@@ -138,11 +138,12 @@ int main(int argc, char **argv)
                                    centralX - sizeX / 2.0f, centralY - sizeY / 2.0f,
                                    sizeX, sizeY,
                                    iterationsLimit, 0);
-                results_gpu.readN(gpu_results.ptr(), width * height);
                 t.nextLap();
             }
             std::cout << "GPU: " << t.lapAvg() << "+-" << t.lapStd() << " s" << std::endl;
             std::cout << "GPU: " << maxApproximateFlops / gflops / t.lapAvg() << " GFlops" << std::endl;
+
+            results_gpu.readN(gpu_results.ptr(), width * height);
 
             double realIterationsFraction = 0.0;
             for (int j = 0; j < height; ++j) {
