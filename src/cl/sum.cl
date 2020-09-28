@@ -13,10 +13,6 @@ __kernel void sum_v2(__global const unsigned int* xs,
     int groupId = get_group_id(0);
     int groupSize = get_local_size(0);
 
-    int iWarp = iGroup % WARP_SIZE;
-    int warpIndex = iGroup / WARP_SIZE;
-    int warpCount = (groupSize + WARP_SIZE - 1) / WARP_SIZE;
-
     int idx = groupId * groupSize * 2 + localId;
 
     // init local memory (half of threads on 1 iter are idle, add values of next group also)
