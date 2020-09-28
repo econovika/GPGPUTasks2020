@@ -19,7 +19,7 @@ __kernel void sum_v2(__global const unsigned int* xs,
 
     int idx = groupId * groupSize * 2 + localId;
 
-    // init local memory (threads on 1 iter are idle, add values of next group also)
+    // init local memory (half of threads on 1 iter are idle, add values of next group also)
     l_xs[localId] = idx < n ? xs[idx] + xs[idx + groupSize] : 0;
     barrier(CLK_LOCAL_MEM_FENCE);
 
