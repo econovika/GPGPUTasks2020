@@ -136,8 +136,7 @@ int main(int argc, char **argv)
                                    results_gpu,
                                    width, height,
                                    centralX - sizeX / 2.0f, centralY - sizeY / 2.0f,
-                                   sizeX, sizeY,
-                                   iterationsLimit, 0);
+                                   sizeX, sizeY, iterationsLimit);
                 t.nextLap();
             }
             std::cout << "GPU: " << t.lapAvg() << "+-" << t.lapStd() << " s" << std::endl;
