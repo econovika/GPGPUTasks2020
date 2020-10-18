@@ -48,6 +48,11 @@ int main(int argc, char **argv)
             // TODO
             unsigned int work_group_size = 128;
             unsigned int global_work_size = ...;
+            // Для этой задачи естественнее использовать двухмерный NDRange. Чтобы это сформулировать
+            // в терминологии библиотеки - нужно вызвать другую вариацию конструктора WorkSize.
+            // В CLion удобно смотреть какие есть вариант аргументов в конструкторах:
+            // поставьте каретку редактирования кода внутри скобок конструктора WorkSize -> Ctrl+P -> заметьте что есть 2, 4 и 6 параметров
+            // - для 1D, 2D и 3D рабочего пространства соответственно
             matrix_transpose_kernel.exec(gpu::WorkSize(work_group_size, global_work_size), as_gpu, as_t_gpu, M, K);
 
             t.nextLap();
