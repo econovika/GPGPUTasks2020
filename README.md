@@ -11,3 +11,7 @@
  - [Задание 5](https://github.com/GPGPUCourse/GPGPUTasks2020/tree/task05): Bitonic sort, radix sort.
  - [Задание 6](https://github.com/GPGPUCourse/GPGPUTasks2020/tree/task06): Merge sort.
  - [Задание 65](https://github.com/GPGPUCourse/GPGPUTasks2020/tree/task65): Творческое применение SDF на [shadertoy.com](https://www.shadertoy.com/) (необязательное).
+
+А так же:
+
+ - [OpenCL <-> CUDA](https://github.com/GPGPUCourse/GPGPUTasks2020/tree/cuda): Пример как написать кернел на OpenCL, а запускать его в т.ч. через CUDA и т.о. получить доступ к профилировщику и cuda-memcheck.
