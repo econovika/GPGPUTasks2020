@@ -15,3 +15,4 @@
 А так же:
 
  - [OpenCL <-> CUDA](https://github.com/GPGPUCourse/GPGPUTasks2020/tree/cuda): Пример как написать кернел на OpenCL, а запускать его в т.ч. через CUDA и т.о. получить доступ к профилировщику и cuda-memcheck.
+ - [Вопросы к экзамену.](https://github.com/GPGPUCourse/GPGPUTasks2020/blob/master/%D0%92%D0%BE%D0%BF%D1%80%D0%BE%D1%81%D0%BD%D0%B8%D0%BA_%D0%BA_%D1%8D%D0%BA%D0%B7%D0%B0%D0%BC%D0%B5%D0%BD%D1%83_%D0%BF%D0%BE_GPGPU_2020.pdf)
