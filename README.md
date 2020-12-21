@@ -1,18 +1,62 @@
-В этом репозитории предложены задания для [курса по вычислениям на видеокартах в CSC](https://compscicenter.ru/courses/video_cards_computation/2020-autumn/).
+[Остальные задания](https://github.com/GPGPUCourse/GPGPUTasks2020/).
 
-Задания:
+Сдача задания через сайт [CSC](https://compscicenter.ru/).
 
- - [Задание 0](https://github.com/GPGPUCourse/GPGPUTasks2020/tree/task00): Вводное.
- - [Задание 1](https://github.com/GPGPUCourse/GPGPUTasks2020/tree/task01): A+B.
- - [Задание 2](https://github.com/GPGPUCourse/GPGPUTasks2020/tree/task02): Теоретическое задание: параллелизуемость/code divergence/memory coalesced access (сдача через сайт CSC).
- - [Задание 3](https://github.com/GPGPUCourse/GPGPUTasks2020/tree/task03): Фрактал Мандельброта. Сумма чисел. Максимальный по сумме префикс.
- - [Задание 4](https://github.com/GPGPUCourse/GPGPUTasks2020/tree/task04): Транспонирование матрицы, умножение матриц.
- - [Задание 42](https://github.com/GPGPUCourse/GPGPUTasks2020/tree/task42): Система непересекающихся множеств и барьеры (необязательное, теоретическое).
- - [Задание 5](https://github.com/GPGPUCourse/GPGPUTasks2020/tree/task05): Bitonic sort, radix sort.
- - [Задание 6](https://github.com/GPGPUCourse/GPGPUTasks2020/tree/task06): Merge sort.
- - [Задание 65](https://github.com/GPGPUCourse/GPGPUTasks2020/tree/task65): Творческое применение SDF на [shadertoy.com](https://www.shadertoy.com/) (необязательное).
+# Задание 2. Теоретическое задание: параллелизуемость/code divergence/memory coalesced access
 
-А так же:
+Ниже три небольших задачи. Рекомендуется хотя бы начать делать каждое задание к лекции 21 сентября, чтобы задать вопросы если они будут и обсудить задания.
 
- - [OpenCL <-> CUDA](https://github.com/GPGPUCourse/GPGPUTasks2020/tree/cuda): Пример как написать кернел на OpenCL, а запускать его в т.ч. через CUDA и т.о. получить доступ к профилировщику и cuda-memcheck.
- - [Вопросы к экзамену.](https://github.com/GPGPUCourse/GPGPUTasks2020/blob/master/%D0%92%D0%BE%D0%BF%D1%80%D0%BE%D1%81%D0%BD%D0%B8%D0%BA_%D0%BA_%D1%8D%D0%BA%D0%B7%D0%B0%D0%BC%D0%B5%D0%BD%D1%83_%D0%BF%D0%BE_GPGPU_2020.pdf)
+**1)** Пусть на вход дан сигнал x[n], а на выход нужно дать два сигнала y1[n] и y2[n]:
+
+```
+ y1[n] = x[n - 1] + x[n] + x[n + 1]
+ y2[n] = y2[n - 2] + y2[n - 1] + x[n]
+```
+
+Какой из двух сигналов будет проще и быстрее реализовать в модели массового параллелизма на GPU и почему?
+
+**2)** Предположим что размер warp/wavefront равен 32 и рабочая группа делится
+ на warp/wavefront-ы таким образом что внутри warp/wavefront
+ номер WorkItem по оси x меняется чаще всего, затем по оси y и затем по оси z.
+
+Напоминание: инструкция исполняется (пусть и отмаскированно) в каждом потоке warp/wavefront если хотя бы один поток выполняет эту инструкцию неотмаскированно. Если не все потоки выполняют эту инструкцию неотмаскированно - происходит т.н. code divergence.
+
+Пусть размер рабочей группы (32, 32, 1)
+
+```
+int idx = get_local_id(1) + get_local_size(1) * get_local_id(0);
+if (idx % 32 < 16)
+    foo();
+else
+    bar();
+```
+
+Произойдет ли code divergence? Почему?
+
+**3)** Как и в прошлом задании предположим что размер warp/wavefront равен 32 и рабочая группа делится
+ на warp/wavefront-ы таким образом что внутри warp/wavefront
+ номер WorkItem по оси x меняется чаще всего, затем по оси y и затем по оси z.
+
+Пусть размер рабочей группы (32, 32, 1).
+Пусть data - указатель на массив float-данных в глобальной видеопамяти идеально выравненный (выравнен по 128 байтам, т.е. data % 128 == 0). И пусть размер кеш линии - 128 байт.
+
+(a)
+```
+data[get_local_id(0) + get_local_size(0) * get_local_id(1)] = 1.0f;
+```
+
+Будет ли данное обращение к памяти coalesced? Сколько кеш линий записей произойдет в одной рабочей группе?
+
+(b)
+```
+data[get_local_id(1) + get_local_size(1) * get_local_id(0)] = 1.0f;
+```
+
+Будет ли данное обращение к памяти coalesced? Сколько кеш линий записей произойдет в одной рабочей группе?
+
+(c)
+```
+data[1 + get_local_id(0) + get_local_size(0) * get_local_id(1)] = 1.0f;
+```
+
+Будет ли данное обращение к памяти coalesced? Сколько кеш линий записей произойдет в одной рабочей группе?
