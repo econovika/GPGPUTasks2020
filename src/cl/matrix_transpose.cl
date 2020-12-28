@@ -1,25 +1,25 @@
-#include clion_defines.cl
+#define TILE_SIZE 16
 
-
-__kernel void matrix_transpose(__global const *m,
-                               __global const *mt,
-                               const unsigned int m,
-                               const unsigned int k)
+__kernel void matrix_transpose(const __global float *const m,
+                               __global float *mt,
+                               const unsigned int h,
+                               const unsigned int w)
 {
-    const unsigned int i = get_global_id(0);
-    const unsigned int j = get_global_id(1);
+    const unsigned int x = get_global_id(0);
+    const unsigned int y = get_global_id(1);
 
-    __local float tile[WARP_SIZE][WARP_SIZE + 1];
-    const unsigned int loc_i = get_local_id(0);
-    const unsigned int loc_j = get_local_id(1);
+    // declare local array to be shared by all work items within a group => groupSize
+    __local float tile[TILE_SIZE * (TILE_SIZE + 1)];
 
-    tile[j * WARP_SIZE][i] = m[j * k + i];
-    barrier(CLK_LOCAL_MEM_FENCE)
+    const unsigned int local_x = get_local_id(0); // in group
+    const unsigned int local_y = get_local_id(1);
 
-    const float tmp = tile[j * WARP_SIZE][i];
-    tile[j * WARP_SIZE][i] = tile[i * WARP_SIZE][j];
-    tile[i * WARP_SIZE][j] = tmp;
-    barrier(CLK_LOCAL_MEM_FENCE)
+    // from global memory to local
+    if (x < w && y < h)
+        tile[local_y * (TILE_SIZE + 1) + local_x] = m[x * h + y];
+    barrier(CLK_LOCAL_MEM_FENCE);
 
-    mt[j * m + i] = tile[i * WARP_SIZE][j];
+    // write transposed to global memory
+    if (x < w && y < h)
+        mt[y * w + x] = tile[local_y * (TILE_SIZE + 1) + local_x];
 }
