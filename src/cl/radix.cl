@@ -11,19 +11,22 @@
 __kernel void radix(__global unsigned int* sum,
                     __global unsigned int* xs,
                     __global unsigned int* ys,
-                    const int n)
+                    const unsigned int n)
 {
     const int global_id = get_global_id(0);
     if (global_id >= n)
         return;
     // sum[global_id] - how many 0s in massive before given global_id
-    ys[sum[global_id]] = xs[global_id];
+    if (sum[global_id] >= n)
+        printf("true");
+//    ys[sum[global_id]] = xs[global_id];
 }
 
-__kernel void part_sum(__global const unsigned int* xs,
-                       __global const unsigned int* ys,
-                       const unsigned int n,
-                       const unsigned int step)
+
+__kernel void part_sum(__global unsigned int* xs,
+                       __global unsigned int* ys,
+                       const int n,
+                       const int step)
 {
     __local unsigned int tmp[LOCAL_SIZE];
 
@@ -41,10 +44,11 @@ __kernel void part_sum(__global const unsigned int* xs,
         ys[global_id] = tmp[local_id] + tmp[local_id + step];
 }
 
+
 __kernel void global_pref_sum(__global unsigned int* ys,
                               __global unsigned int* sum,
-                              const int pow,
-                              const int n)
+                              const unsigned int pow,
+                              const unsigned int n)
 {
     // Kernel to compute pow_th pref sums for given group
     const int global_id = get_global_id(0);
@@ -53,17 +57,18 @@ __kernel void global_pref_sum(__global unsigned int* ys,
     const int group_id = get_group_id(0);
     const int local_id = get_local_id(0);
 
-    if (( (group_id >> pow) & 1 ) && ( local_id % (2 * step) == 0 )) // if 2^pow in group_id decomposition
+    if (( (group_id >> pow) & 1 ) && ( local_id % (2 * pow) == 0 )) // if 2^pow in group_id decomposition
         // how many 0s before given group
-        sum[group_id] += ys[group_id / (1 << pow) - 1]
+        sum[group_id] += ys[group_id / (1 << pow) - 1];
 }
+
 
 __kernel void local_pref_sum(__global unsigned int* xs,
                              __global unsigned int* ys,
                              __global unsigned int* sum,
-                             const int n,
-                             const int bit,
-                             const int global)
+                             const unsigned int n,
+                             const unsigned int bit,
+                             const unsigned int glob)
 {
     // Kernel to sum how many member numbers before i_th
     // have 0s in bit_th bit
@@ -93,12 +98,13 @@ __kernel void local_pref_sum(__global unsigned int* xs,
             buf_b[local_id] = buf_a[local_id] + buf_a[local_id - step];
         else
             buf_b[local_id] = buf_a[local_id];
-        swap(buf_a, buf_b);
+        swap(buf_a, buf_b)
         barrier(CLK_LOCAL_MEM_FENCE);
     }
 
-    if (global == 1)
+    if (glob == 1) {
         ys[group_id] = buf_a[LOCAL_SIZE - 1];
+    }
     else {
         ys[global_id] = buf_a[local_id] + sum[group_id];
     }

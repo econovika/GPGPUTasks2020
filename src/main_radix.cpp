@@ -34,7 +34,7 @@ int main(int argc, char **argv)
     context.init(device.device_id_opencl);
     context.activate();
 
-    int benchmarkingIters = 10;
+    int benchmarkingIters = 1;
     unsigned int n = 32 * 1024 * 1024;
     std::vector<unsigned int> xs(n, 0);
     FastRandom r(n);
@@ -64,11 +64,11 @@ int main(int argc, char **argv)
     ys_gpu.resizeN(n);
 
     {
-        ocl::Kernel radix(radix_kernel, radix_kernel_length, "radix");
-        radix.compile();
-
         ocl::Kernel global_pref_sum(radix_kernel, radix_kernel_length, "global_pref_sum");
         global_pref_sum.compile();
+
+        ocl::Kernel radix(radix_kernel, radix_kernel_length, "radix");
+        radix.compile();
 
         ocl::Kernel local_pref_sum(radix_kernel, radix_kernel_length, "local_pref_sum");
         local_pref_sum.compile();
@@ -81,7 +81,7 @@ int main(int argc, char **argv)
             xs_gpu.writeN(xs.data(), n);
             t.restart(); // Запускаем секундомер после прогрузки данных, чтобы замерять время работы кернела, а не трансфер данных
 
-            unsigned int workGroupSize = 128;
+            unsigned int workGroupSize = 16;
             unsigned int global_work_size = std::ceil(n / workGroupSize) * workGroupSize;
 
             // Prefix sums before each group
@@ -97,23 +97,27 @@ int main(int argc, char **argv)
                 sum_gpu.resizeN(n);
 
                 int global = 1;
+                printf("BIT: %i\n", bit);
                 // Compute sums in each work group
                 local_pref_sum.exec(gpu::WorkSize(workGroupSize, global_work_size),
                                     xs_gpu, local_pref_sum_gpu, global_sum_gpu, n, bit, global);
 
                 int pow = 0;
-                for (int step = 0; step < workGroupSize; step *= 2)
+                for (int step = 1; step < workGroupSize; step <<= 1)
                 {
                     gpu::gpu_mem_32u part_sum_gpu;
                     part_sum_gpu.resizeN(std::ceil(n / workGroupSize));
 
                     // Compute partial sums
-                    part_sum.exec(gpu::WorkSize(workGroupSize, std::ceil(n / workGroupSize)),
-                                  local_pref_sum_gpu, part_sum_gpu, std::ceil(n / workGroupSize));
+                    int work_size = std::ceil(n / workGroupSize);
+                    int global_n = std::ceil(n / workGroupSize);
+
+                    part_sum.exec(gpu::WorkSize(workGroupSize, work_size),
+                                  local_pref_sum_gpu, part_sum_gpu, global_n, step);
 
                     // Compute global sums
-                    global_pref_sum.exec(gpu::WorkSize(workGroupSize, std::ceil(n / workGroupSize)),
-                                         part_sum_gpu, global_sum_gpu, pow, std::ceil(n / workGroupSize));
+                    global_pref_sum.exec(gpu::WorkSize(workGroupSize, work_size),
+                                         part_sum_gpu, global_sum_gpu, pow, global_n);
 
                     pow++;
                 }
