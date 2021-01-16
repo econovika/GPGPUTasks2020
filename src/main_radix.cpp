@@ -4,11 +4,10 @@
 #include <libgpu/context.h>
 #include <libgpu/shared_device_buffer.h>
 
+#include <math.h>
+
 // Этот файл будет сгенерирован автоматически в момент сборки - см. convertIntoHeader в CMakeLists.txt:18
 #include "cl/radix_cl.h"
-#include "cl/global_pref_sum_cl.h"
-#include "cl/local_pref_sum_cl.h"
-#include "cl/part_sum_cl.h"
 
 #include <vector>
 #include <iostream>
@@ -37,10 +36,10 @@ int main(int argc, char **argv)
 
     int benchmarkingIters = 10;
     unsigned int n = 32 * 1024 * 1024;
-    std::vector<unsigned int> as(n, 0);
+    std::vector<unsigned int> xs(n, 0);
     FastRandom r(n);
     for (unsigned int i = 0; i < n; ++i) {
-        as[i] = (unsigned int) r.next(0, std::numeric_limits<int>::max());
+        xs[i] = (unsigned int) r.next(0, std::numeric_limits<int>::max());
     }
     std::cout << "Data generated for n=" << n << "!" << std::endl;
 
@@ -48,7 +47,7 @@ int main(int argc, char **argv)
     {
         timer t;
         for (int iter = 0; iter < benchmarkingIters; ++iter) {
-            cpu_sorted = as;
+            cpu_sorted = xs;
             std::sort(cpu_sorted.begin(), cpu_sorted.end());
             t.nextLap();
         }
@@ -56,84 +55,87 @@ int main(int argc, char **argv)
         std::cout << "CPU: " << (n/1000/1000) / t.lapAvg() << " millions/s" << std::endl;
     }
 
-    gpu::gpu_mem_32u as_gpu;
-    as_gpu.resizeN(n);
+    // Input vector with initial numbers
+    gpu::gpu_mem_32u xs_gpu;
+    xs_gpu.resizeN(n);
 
+    // Output vector sorted
     gpu::gpu_mem_32u ys_gpu;
     ys_gpu.resizeN(n);
-
-    gpu::gpu_mem_32u zs_gpu;
-    zs_gpu.resizeN(n);
 
     {
         ocl::Kernel radix(radix_kernel, radix_kernel_length, "radix");
         radix.compile();
 
-        ocl::Kernel global_pref_sum(global_pref_sum_kernel, global_pref_sum_kernel_length, "global_pref_sum");
+        ocl::Kernel global_pref_sum(radix_kernel, radix_kernel_length, "global_pref_sum");
         global_pref_sum.compile();
 
-        ocl::Kernel local_pref_sum(local_pref_sum_kernel, local_pref_sum_length, "local_pref_sum");
+        ocl::Kernel local_pref_sum(radix_kernel, radix_kernel_length, "local_pref_sum");
         local_pref_sum.compile();
 
-        ocl::Kernel part_sum(part_sum_kernel, part_sum_kernel_length, "part_sum");
+        ocl::Kernel part_sum(radix_kernel, radix_kernel_length, "part_sum");
         part_sum.compile();
 
         timer t;
         for (int iter = 0; iter < benchmarkingIters; ++iter) {
-            as_gpu.writeN(as.data(), n);
+            xs_gpu.writeN(xs.data(), n);
             t.restart(); // Запускаем секундомер после прогрузки данных, чтобы замерять время работы кернела, а не трансфер данных
 
             unsigned int workGroupSize = 128;
-            unsigned int global_work_size = (n + workGroupSize - 1) / workGroupSize * workGroupSize;
+            unsigned int global_work_size = std::ceil(n / workGroupSize) * workGroupSize;
 
-            gpu::gpu_mem_32u bs_gpu;
-            bs_gpu.resizeN(n / workGroupSize);
-
+            // Prefix sums before each group
             gpu::gpu_mem_32u global_sum_gpu;
-            global_sum_gpu.resizeN(n / workGroupSize);
+            global_sum_gpu.resizeN(std::ceil(n / workGroupSize));
 
             for (int bit = 0; bit < 32; bit++)
             {
-                const int global = 1;
+                gpu::gpu_mem_32u local_pref_sum_gpu;
+                local_pref_sum_gpu.resizeN(std::ceil(n / workGroupSize));
+
+                gpu::gpu_mem_32u sum_gpu;
+                sum_gpu.resizeN(n);
+
+                int global = 1;
                 // Compute sums in each work group
                 local_pref_sum.exec(gpu::WorkSize(workGroupSize, global_work_size),
-                                    as_gpu, bs_gpu, global_sum_gpu, n, bit, global);
+                                    xs_gpu, local_pref_sum_gpu, global_sum_gpu, n, bit, global);
 
                 int pow = 0;
                 for (int step = 0; step < workGroupSize; step *= 2)
                 {
                     gpu::gpu_mem_32u part_sum_gpu;
-                    part_sum_gpu.resizeN(n / workGroupSize / (1 << step));
+                    part_sum_gpu.resizeN(std::ceil(n / workGroupSize));
 
                     // Compute partial sums
-                    part_sum.exec(gpu::WorkSize(workGroupSize, global_work_size),
-                                  bs_gpu, part_sum_gpu, n / workGroupSize / (1 << step));
+                    part_sum.exec(gpu::WorkSize(workGroupSize, std::ceil(n / workGroupSize)),
+                                  local_pref_sum_gpu, part_sum_gpu, std::ceil(n / workGroupSize));
 
                     // Compute global sums
-                    global_pref_sum.exec(gpu::WorkSize(workGroupSize, global_work_size),
-                                         part_sum_gpu, global_sum_gpu, pow, n / workGroupSize);
+                    global_pref_sum.exec(gpu::WorkSize(workGroupSize, std::ceil(n / workGroupSize)),
+                                         part_sum_gpu, global_sum_gpu, pow, std::ceil(n / workGroupSize));
 
                     pow++;
                 }
-                const int global = 0;
+                global = 0;
                 local_pref_sum.exec(gpu::WorkSize(workGroupSize, global_work_size),
-                                    as_gpu, ys_gpu, global_sum_gpu, n, bit, global);
+                                    xs_gpu, sum_gpu, global_sum_gpu, n, bit, global);
 
                 radix.exec(gpu::WorkSize(workGroupSize, global_work_size),
-                           ys_gpu, as_gpu, zx_gpu, n);
+                           sum_gpu, xs_gpu, ys_gpu, n);
 
-                zx_gpu.readN(&as, n);
-                as_gpu.writeN(as.data(), n);
+                ys_gpu.readN(xs.data(), n);
+                xs_gpu.writeN(xs.data(), n);
             }
             t.nextLap();
         }
         std::cout << "GPU: " << t.lapAvg() << "+-" << t.lapStd() << " s" << std::endl;
         std::cout << "GPU: " << (n/1000/1000) / t.lapAvg() << " millions/s" << std::endl;
-        as_gpu.readN(as.data(), n);
+        xs_gpu.readN(xs.data(), n);
     }
     // Проверяем корректность результатов
     for (int i = 0; i < n; ++i) {
-        EXPECT_THE_SAME(as[i], cpu_sorted[i], "GPU results should be equal to CPU results!");
+        EXPECT_THE_SAME(xs[i], cpu_sorted[i], "GPU results should be equal to CPU results!");
     }
 
     return 0;
