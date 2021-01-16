@@ -1,4 +1,4 @@
-#define LOCAL_SIZE 128
+#define LOCAL_SIZE 16
 
 #define swap(a, b)                  \
 {                                   \
@@ -17,9 +17,8 @@ __kernel void radix(__global unsigned int* sum,
     if (global_id >= n)
         return;
     // sum[global_id] - how many 0s in massive before given global_id
-    if (sum[global_id] >= n)
-        printf("true");
-//    ys[sum[global_id]] = xs[global_id];
+    printf("AFT: %i\n", xs[global_id]);
+    ys[sum[global_id]] = xs[global_id];
 }
 
 
@@ -40,16 +39,17 @@ __kernel void part_sum(__global unsigned int* xs,
 
     barrier(CLK_LOCAL_MEM_FENCE);
 
-    if (local_id % (2 * step) == 0)
+    if (local_id % (2 * step) == 0) {
         ys[global_id] = tmp[local_id] + tmp[local_id + step];
+    }
 }
 
 
 __kernel void global_pref_sum(__global unsigned int* ys,
                               __global unsigned int* sum,
                               const unsigned int pow,
-                              const unsigned int n)
-{
+                              const unsigned int step,
+                              const unsigned int n) {
     // Kernel to compute pow_th pref sums for given group
     const int global_id = get_global_id(0);
     if (global_id >= n)
@@ -57,9 +57,12 @@ __kernel void global_pref_sum(__global unsigned int* ys,
     const int group_id = get_group_id(0);
     const int local_id = get_local_id(0);
 
-    if (( (group_id >> pow) & 1 ) && ( local_id % (2 * pow) == 0 )) // if 2^pow in group_id decomposition
+    if (((group_id >> pow) & 1) && (local_id % (2 * step) == 0)) {
         // how many 0s before given group
+//        printf("BEF: %i\n", sum[group_id]);
         sum[group_id] += ys[group_id / (1 << pow) - 1];
+//        printf("AFT: %i\n", sum[group_id]);
+    }
 }
 
 
@@ -106,6 +109,6 @@ __kernel void local_pref_sum(__global unsigned int* xs,
         ys[group_id] = buf_a[LOCAL_SIZE - 1];
     }
     else {
-        ys[global_id] = buf_a[local_id] + sum[group_id];
+        ys[global_id] = buf_a[local_id] + sum[group_id - 1] * (1 && group_id);
     }
 }

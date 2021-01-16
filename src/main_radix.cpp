@@ -35,7 +35,7 @@ int main(int argc, char **argv)
     context.activate();
 
     int benchmarkingIters = 1;
-    unsigned int n = 32 * 1024 * 1024;
+    unsigned int n =  32;
     std::vector<unsigned int> xs(n, 0);
     FastRandom r(n);
     for (unsigned int i = 0; i < n; ++i) {
@@ -60,8 +60,6 @@ int main(int argc, char **argv)
     xs_gpu.resizeN(n);
 
     // Output vector sorted
-    gpu::gpu_mem_32u ys_gpu;
-    ys_gpu.resizeN(n);
 
     {
         ocl::Kernel global_pref_sum(radix_kernel, radix_kernel_length, "global_pref_sum");
@@ -90,6 +88,9 @@ int main(int argc, char **argv)
 
             for (int bit = 0; bit < 32; bit++)
             {
+                gpu::gpu_mem_32u ys_gpu;
+                ys_gpu.resizeN(n);
+
                 gpu::gpu_mem_32u local_pref_sum_gpu;
                 local_pref_sum_gpu.resizeN(std::ceil(n / workGroupSize));
 
@@ -97,7 +98,6 @@ int main(int argc, char **argv)
                 sum_gpu.resizeN(n);
 
                 int global = 1;
-                printf("BIT: %i\n", bit);
                 // Compute sums in each work group
                 local_pref_sum.exec(gpu::WorkSize(workGroupSize, global_work_size),
                                     xs_gpu, local_pref_sum_gpu, global_sum_gpu, n, bit, global);
@@ -117,7 +117,7 @@ int main(int argc, char **argv)
 
                     // Compute global sums
                     global_pref_sum.exec(gpu::WorkSize(workGroupSize, work_size),
-                                         part_sum_gpu, global_sum_gpu, pow, global_n);
+                                         part_sum_gpu, global_sum_gpu, pow, step, global_n);
 
                     pow++;
                 }
@@ -128,8 +128,8 @@ int main(int argc, char **argv)
                 radix.exec(gpu::WorkSize(workGroupSize, global_work_size),
                            sum_gpu, xs_gpu, ys_gpu, n);
 
-                ys_gpu.readN(xs.data(), n);
-                xs_gpu.writeN(xs.data(), n);
+                ys_gpu.writeN(xs.data(), n);
+                xs_gpu.readN(xs.data(), n);
             }
             t.nextLap();
         }
@@ -139,7 +139,7 @@ int main(int argc, char **argv)
     }
     // Проверяем корректность результатов
     for (int i = 0; i < n; ++i) {
-        EXPECT_THE_SAME(xs[i], cpu_sorted[i], "GPU results should be equal to CPU results!");
+        printf("GPU: %i\tCPU: %i\n", xs[i], cpu_sorted[i]);
     }
 
     return 0;
