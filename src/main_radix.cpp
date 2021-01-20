@@ -9,6 +9,7 @@
 // Этот файл будет сгенерирован автоматически в момент сборки - см. convertIntoHeader в CMakeLists.txt:18
 #include "cl/radix_cl.h"
 
+#include <cmath>
 #include <vector>
 #include <iostream>
 #include <stdexcept>
@@ -35,7 +36,7 @@ int main(int argc, char **argv)
     context.activate();
 
     int benchmarkingIters = 1;
-    unsigned int n =  32;
+    unsigned int n = 32 * 32;
     std::vector<unsigned int> xs(n, 0);
     FastRandom r(n);
     for (unsigned int i = 0; i < n; ++i) {
@@ -86,7 +87,7 @@ int main(int argc, char **argv)
             gpu::gpu_mem_32u global_sum_gpu;
             global_sum_gpu.resizeN(std::ceil(n / workGroupSize));
 
-            for (int bit = 0; bit < 32; bit++)
+            for (int bit = 0; bit < 1; bit++)
             {
                 gpu::gpu_mem_32u ys_gpu;
                 ys_gpu.resizeN(n);
@@ -102,22 +103,44 @@ int main(int argc, char **argv)
                 local_pref_sum.exec(gpu::WorkSize(workGroupSize, global_work_size),
                                     xs_gpu, local_pref_sum_gpu, global_sum_gpu, n, bit, global);
 
-                int pow = 0;
-                for (int step = 1; step < workGroupSize; step <<= 1)
-                {
-                    gpu::gpu_mem_32u part_sum_gpu;
-                    part_sum_gpu.resizeN(std::ceil(n / workGroupSize));
+                std::vector<unsigned int> loc_sum(std::ceil(n / workGroupSize), 0);
+                local_pref_sum_gpu.readN(loc_sum.data(), std::ceil(n / workGroupSize));
+//                for (int i = 0; i < n; i++)
+//                    printf("XS: %i\tBIT: %i\n", xs[i], ((xs[i] & (1 << bit)) + 1) & 1);
+//
+//                for (int i = 0; i < std::ceil(n / workGroupSize); i++)
+//                    printf("LOC SUM: %i\n", loc_sum[i]);
 
+                gpu::gpu_mem_32u part_sum_gpu;
+                part_sum_gpu.resizeN(std::ceil(n / workGroupSize));
+
+                int work_size = std::ceil(n / workGroupSize);
+
+                part_sum_gpu.writeN(loc_sum.data(), std::ceil(n / workGroupSize));
+
+                global_pref_sum.exec(gpu::WorkSize(workGroupSize, work_size),
+                                     part_sum_gpu, global_sum_gpu, 0, 0, work_size);
+
+                int pow = 1;
+                for (int step = 1; step <= std::log2(std::ceil(n / workGroupSize)); step <<= 1)
+                {
                     // Compute partial sums
-                    int work_size = std::ceil(n / workGroupSize);
-                    int global_n = std::ceil(n / workGroupSize);
+
+                    int global_n = std::ceil(n / workGroupSize / step);
 
                     part_sum.exec(gpu::WorkSize(workGroupSize, work_size),
                                   local_pref_sum_gpu, part_sum_gpu, global_n, step);
 
+                    std::vector<unsigned int> part(std::ceil(n / workGroupSize), 0);
+                    part_sum_gpu.readN(part.data(), std::ceil(n / workGroupSize));
+//                    for (int i = 0; i < std::ceil(n / workGroupSize); i++)
+//                        printf("PART SUM: %i\tSTEP: %i\n", part[i], step);
+
                     // Compute global sums
                     global_pref_sum.exec(gpu::WorkSize(workGroupSize, work_size),
                                          part_sum_gpu, global_sum_gpu, pow, step, global_n);
+
+                    local_pref_sum_gpu.writeN(part.data(), std::ceil(n / workGroupSize));
 
                     pow++;
                 }
@@ -125,11 +148,19 @@ int main(int argc, char **argv)
                 local_pref_sum.exec(gpu::WorkSize(workGroupSize, global_work_size),
                                     xs_gpu, sum_gpu, global_sum_gpu, n, bit, global);
 
+                std::vector<unsigned int> summ(n, 0);
+                sum_gpu.readN(summ.data(), n);
+
+                for (int i = 0; i < n; i++)
+                printf("SUMM: %i\n", summ[i]);
+
                 radix.exec(gpu::WorkSize(workGroupSize, global_work_size),
                            sum_gpu, xs_gpu, ys_gpu, n);
 
-                ys_gpu.writeN(xs.data(), n);
-                xs_gpu.readN(xs.data(), n);
+                ys_gpu.readN(xs.data(), n);
+                for (int i = 0; i < n; i++)
+                    printf("NEW XS: %i\tBIT: %i\n", xs[i], ((xs[i] & (1 << bit)) + 1) & 1);
+                xs_gpu.writeN(xs.data(), n);
             }
             t.nextLap();
         }

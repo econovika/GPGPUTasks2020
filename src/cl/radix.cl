@@ -1,5 +1,7 @@
 #define LOCAL_SIZE 16
 
+
+
 #define swap(a, b)                  \
 {                                   \
     __local unsigned int *tmp = a;  \
@@ -14,10 +16,10 @@ __kernel void radix(__global unsigned int* sum,
                     const unsigned int n)
 {
     const int global_id = get_global_id(0);
+//    const int group_id = get_group_id(0);
     if (global_id >= n)
         return;
     // sum[global_id] - how many 0s in massive before given global_id
-    printf("AFT: %i\n", xs[global_id]);
     ys[sum[global_id]] = xs[global_id];
 }
 
@@ -47,7 +49,7 @@ __kernel void part_sum(__global unsigned int* xs,
 
 __kernel void global_pref_sum(__global unsigned int* ys,
                               __global unsigned int* sum,
-                              const unsigned int pow,
+                              const  int pow,
                               const unsigned int step,
                               const unsigned int n) {
     // Kernel to compute pow_th pref sums for given group
@@ -57,11 +59,13 @@ __kernel void global_pref_sum(__global unsigned int* ys,
     const int group_id = get_group_id(0);
     const int local_id = get_local_id(0);
 
-    if (((group_id >> pow) & 1) && (local_id % (2 * step) == 0)) {
-        // how many 0s before given group
-//        printf("BEF: %i\n", sum[group_id]);
-        sum[group_id] += ys[group_id / (1 << pow) - 1];
-//        printf("AFT: %i\n", sum[group_id]);
+    if (((global_id >> pow) & 1)) {
+            // how many 0s before given group
+            printf("BEF: %i\t%i\t%i\t%i\t%i\t%i\n", pow, step, global_id, global_id / (1 << pow) - 1, ys[(global_id / (1 << pow) - 1) * (step + 1)], sum[global_id]);
+            sum[global_id] += ys[(global_id / (1 << pow) - 1) * (step + 1)];
+            printf("AFT: %i\t%i\t%i\n", step, local_id, sum[global_id]);
+//        barrier(CLK_LOCAL_MEM_FENCE);
+
     }
 }
 
@@ -105,10 +109,14 @@ __kernel void local_pref_sum(__global unsigned int* xs,
         barrier(CLK_LOCAL_MEM_FENCE);
     }
 
-    if (glob == 1) {
-        ys[group_id] = buf_a[LOCAL_SIZE - 1];
+    if (glob == 1)
+        ys[group_id] = 0;
+
+    if (glob == 1 && (group_id + 1 < get_num_groups(0))) {
+        ys[group_id + 1] = buf_a[LOCAL_SIZE - 1];
     }
-    else {
-        ys[global_id] = buf_a[local_id] + sum[group_id - 1] * (1 && group_id);
+
+    if (glob == 0) {
+        ys[global_id] = buf_a[local_id] + sum[group_id];
     }
 }
